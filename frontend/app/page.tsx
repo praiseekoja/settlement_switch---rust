@@ -1,0 +1,508 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
+import { parseUnits, formatUnits } from 'viem';
+import { ArrowDownUp, Info } from 'lucide-react';
+import ChainSelector from './components/ChainSelector';
+import TokenSelector from './components/TokenSelector';
+import RouteDisplay from './components/RouteDisplay';
+import TransactionProgress from './components/TransactionProgress';
+import OptimizationSlider from './components/OptimizationSlider';
+import SavingsDisplay from './components/SavingsDisplay';
+import RouteComparison from './components/RouteComparison';
+import { CONTRACTS, SUPPORTED_CHAINS, TOKENS } from './config';
+
+// Router ABI (minimal - update with full ABI after contract deployment)
+const ROUTER_ABI = [
+  {
+    name: 'getRoutes',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      {
+        components: [
+          { name: 'fromChain', type: 'uint256' },
+          { name: 'toChain', type: 'uint256' },
+          { name: 'token', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'recipient', type: 'address' },
+        ],
+        name: 'request',
+        type: 'tuple',
+      },
+    ],
+    outputs: [
+      {
+        components: [
+          { name: 'bridgeAdapter', type: 'address' },
+          { name: 'bridgeName', type: 'string' },
+          { name: 'estimatedTime', type: 'uint256' },
+          { name: 'estimatedGasCost', type: 'uint256' },
+          { name: 'bridgeFee', type: 'uint256' },
+          { name: 'totalCostUSD', type: 'uint256' },
+          { name: 'amountOut', type: 'uint256' },
+          { name: 'available', type: 'bool' },
+        ],
+        name: 'routes',
+        type: 'tuple[]',
+      },
+    ],
+  },
+  {
+    name: 'executeBestRoute',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'toChain', type: 'uint256' },
+      { name: 'token', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+      { name: 'recipient', type: 'address' },
+    ],
+    outputs: [{ name: 'success', type: 'bool' }],
+  },
+] as const;
+
+// ERC20 ABI (minimal)
+const ERC20_ABI = [
+  {
+    name: 'approve',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;
+
+type TransactionStatus = 'idle' | 'initiating' | 'confirming' | 'bridging' | 'success' | 'error';
+
+export default function BridgePage() {
+  const { address, isConnected, chain } = useAccount();
+  
+  // State
+  const [fromChainId, setFromChainId] = useState(SUPPORTED_CHAINS[0].id);
+  const [toChainId, setToChainId] = useState(SUPPORTED_CHAINS[1].id);
+  const [selectedToken, setSelectedToken] = useState('USDC');
+  const [amount, setAmount] = useState('');
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<number | null>(null);
+  const [optimizationValue, setOptimizationValue] = useState(0); // 0=cheapest, 100=fastest
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [txStatus, setTxStatus] = useState<TransactionStatus>('idle');
+  const [txHash, setTxHash] = useState<string>();
+  const [txError, setTxError] = useState<string>();
+
+  // Get contract addresses
+  const fromChainContracts = CONTRACTS[fromChainId as keyof typeof CONTRACTS];
+  const tokenAddress = fromChainContracts?.[`mock${selectedToken}` as keyof typeof fromChainContracts] as `0x${string}`;
+  const routerAddress = fromChainContracts?.router as `0x${string}`;
+
+  // Contract writes
+  const { writeContract: approve } = useWriteContract();
+  const { writeContract: bridge, data: bridgeTxHash } = useWriteContract();
+
+  // Wait for bridge transaction
+  const { isLoading: isBridging, isSuccess: bridgeSuccess } = useWaitForTransactionReceipt({
+    hash: bridgeTxHash,
+  });
+
+  // Update transaction status
+  useEffect(() => {
+    if (isBridging) {
+      setTxStatus('bridging');
+    } else if (bridgeSuccess) {
+      setTxStatus('success');
+      setTxHash(bridgeTxHash);
+    }
+  }, [isBridging, bridgeSuccess, bridgeTxHash]);
+
+  // Get token decimals
+  const tokenDecimals = TOKENS.find(t => t.symbol === selectedToken)?.decimals || 6;
+
+  // Fetch routes from smart contract
+  const { data: routesData, refetch: refetchRoutes } = useReadContract({
+    address: routerAddress,
+    abi: ROUTER_ABI,
+    functionName: 'getRoutes',
+    args: address && amount && Number(amount) > 0 ? [{
+      fromChain: BigInt(fromChainId),
+      toChain: BigInt(toChainId),
+      token: tokenAddress,
+      amount: parseUnits(amount, tokenDecimals),
+      recipient: address,
+    }] : undefined,
+    query: {
+      enabled: Boolean(address && amount && Number(amount) > 0 && isConnected),
+    },
+  });
+
+  // Sort routes based on optimization preference
+  const sortedRoutes = useMemo(() => {
+    if (!routesData || !Array.isArray(routesData)) return [];
+
+    const formattedRoutes = (routesData as any[]).map(route => ({
+      bridgeName: route.bridgeName,
+      estimatedTime: Number(route.estimatedTime),
+      estimatedGasCost: Number(formatUnits(route.estimatedGasCost, 8)),
+      bridgeFee: Number(formatUnits(route.bridgeFee, tokenDecimals)),
+      totalCostUSD: Number(formatUnits(route.totalCostUSD, 8)),
+      amountOut: Number(formatUnits(route.amountOut, tokenDecimals)),
+      available: route.available,
+    }));
+
+    // Sort based on optimization slider
+    // 0-100: 0=pure cost optimization, 100=pure time optimization
+    const sorted = [...formattedRoutes].sort((a, b) => {
+      // Pure cost optimization (0-20)
+      if (optimizationValue < 20) {
+        return a.totalCostUSD - b.totalCostUSD;
+      }
+      
+      // Pure time optimization (80-100)
+      if (optimizationValue > 80) {
+        return a.estimatedTime - b.estimatedTime;
+      }
+      
+      // Balanced approach (20-80) - weighted score
+      const costWeight = (100 - optimizationValue) / 100;
+      const timeWeight = optimizationValue / 100;
+
+      // Get min/max for normalization to avoid division by zero
+      const costs = formattedRoutes.map(r => r.totalCostUSD);
+      const times = formattedRoutes.map(r => r.estimatedTime);
+      const minCost = Math.min(...costs);
+      const maxCost = Math.max(...costs);
+      const minTime = Math.min(...times);
+      const maxTime = Math.max(...times);
+
+      // Normalize to 0-1 scale (handle edge case where all values are same)
+      const aNormalizedCost = maxCost === minCost ? 0 : (a.totalCostUSD - minCost) / (maxCost - minCost);
+      const aNormalizedTime = maxTime === minTime ? 0 : (a.estimatedTime - minTime) / (maxTime - minTime);
+      const aScore = (aNormalizedCost * costWeight) + (aNormalizedTime * timeWeight);
+
+      const bNormalizedCost = maxCost === minCost ? 0 : (b.totalCostUSD - minCost) / (maxCost - minCost);
+      const bNormalizedTime = maxTime === minTime ? 0 : (b.estimatedTime - minTime) / (maxTime - minTime);
+      const bScore = (bNormalizedCost * costWeight) + (bNormalizedTime * timeWeight);
+
+      return aScore - bScore;
+    });
+
+    // Log for debugging
+    console.log('🔄 Routes sorted with optimization:', optimizationValue);
+    console.log('📊 Sorted routes:', sorted.map(r => ({
+      name: r.bridgeName,
+      cost: r.totalCostUSD.toFixed(6),
+      time: r.estimatedTime + 's'
+    })));
+
+    return sorted;
+  }, [routesData, optimizationValue, tokenDecimals]);
+
+  // Update routes when data changes or optimization changes
+  useEffect(() => {
+    if (sortedRoutes.length > 0) {
+      setRoutes(sortedRoutes);
+      // Only auto-select if routes changed from smart contract, not from slider
+      if (JSON.stringify(routes) !== JSON.stringify(sortedRoutes)) {
+        setSelectedRoute(0); // Auto-select optimized route
+      }
+    }
+  }, [sortedRoutes]);
+
+  // Force re-render when optimization changes
+  useEffect(() => {
+    if (routes.length > 0) {
+      setSelectedRoute(0); // Select new best route when optimization changes
+    }
+  }, [optimizationValue]);
+
+  // Get best and worst routes for savings display
+  const bestCostRoute = useMemo(() => {
+    if (routes.length === 0) return null;
+    return [...routes].sort((a, b) => a.totalCostUSD - b.totalCostUSD)[0];
+  }, [routes]);
+
+  const worstCostRoute = useMemo(() => {
+    if (routes.length === 0) return null;
+    return [...routes].sort((a, b) => b.totalCostUSD - a.totalCostUSD)[0];
+  }, [routes]);
+
+  // Swap chains
+  const handleSwapChains = () => {
+    setFromChainId(toChainId);
+    setToChainId(fromChainId);
+  };
+
+  // Handle bridge transaction
+  const handleBridge = async () => {
+    if (!address || !amount || selectedRoute === null || !isConnected) {
+      alert('Please connect wallet and enter amount');
+      return;
+    }
+
+    if (!routerAddress || routerAddress === '0x0000000000000000000000000000000000000000') {
+      alert('⚠️ Please deploy contracts first and update addresses in config.ts');
+      return;
+    }
+
+    try {
+      setTxStatus('initiating');
+      setTxError(undefined);
+
+      // Step 1: Approve token
+      const amountInWei = parseUnits(amount, tokenDecimals);
+      
+      await approve({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [routerAddress, amountInWei],
+      });
+
+      setTxStatus('confirming');
+
+      // Step 2: Execute bridge
+      await bridge({
+        address: routerAddress,
+        abi: ROUTER_ABI,
+        functionName: 'executeBestRoute',
+        args: [
+          BigInt(toChainId),
+          tokenAddress,
+          amountInWei,
+          address,
+        ],
+      });
+
+    } catch (error: any) {
+      console.error('Bridge error:', error);
+      setTxStatus('error');
+      setTxError(error.message || 'Transaction failed');
+    }
+  };
+
+  const handleCloseProgress = () => {
+    setTxStatus('idle');
+    setTxHash(undefined);
+    setTxError(undefined);
+    setAmount('');
+    refetchRoutes();
+  };
+
+  // Check if contracts are deployed
+  const contractsDeployed = routerAddress && routerAddress !== '0x0000000000000000000000000000000000000000';
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-indigo-50 p-4 sm:p-6 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto pt-8 space-y-6">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-3">
+            C8 Settlement Switch
+          </h1>
+          <p className="text-gray-600 text-lg">
+            Intelligent cross-chain router that finds the <span className="font-semibold text-purple-600">cheapest & fastest</span> path
+          </p>
+        </div>
+
+        {/* Warning if contracts not deployed */}
+        {!contractsDeployed && (
+          <div className="mb-6 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="font-semibold text-amber-900 mb-1">
+                  Contracts Not Deployed
+                </h3>
+                <p className="text-sm text-amber-700">
+                  Deploy contracts first: <code className="bg-amber-100 px-2 py-1 rounded">cd contract && npm run deploy:all</code>
+                  <br />Then update addresses in <code className="bg-amber-100 px-2 py-1 rounded">frontend/app/config.ts</code>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Bridge Interface */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white">
+                <h2 className="text-2xl font-bold mb-2">Cross-Chain Bridge</h2>
+                <p className="text-purple-100 text-sm">
+                  Powered by Arbitrum • Multi-path routing
+                </p>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Current Mode Indicator */}
+                {amount && Number(amount) > 0 && routes.length > 0 && (
+                  <div className="bg-gradient-to-r from-purple-100 to-indigo-100 border-2 border-purple-300 rounded-lg p-3 mb-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse"></div>
+                        <span className="text-sm font-medium text-purple-900">
+                          Active Mode:
+                        </span>
+                      </div>
+                      <span className="text-sm font-bold text-purple-700">
+                        {optimizationValue < 20 ? "💰 Cheapest Route" : optimizationValue < 80 ? "⚖️ Balanced" : "⚡ Fastest Route"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Optimization Slider */}
+                <OptimizationSlider
+                  value={optimizationValue}
+                  onChange={setOptimizationValue}
+                />
+
+                {/* From Chain */}
+                <ChainSelector
+                  selectedChainId={fromChainId}
+                  onSelect={setFromChainId}
+                  label="From Chain"
+                  excludeChainId={toChainId}
+                />
+
+                {/* Swap Button */}
+                <div className="flex justify-center -my-3 relative z-10">
+                  <button
+                    onClick={handleSwapChains}
+                    className="w-12 h-12 bg-white border-4 border-purple-50 rounded-full flex items-center justify-center hover:bg-purple-50 transition-all hover:scale-110 active:scale-95 shadow-lg"
+                  >
+                    <ArrowDownUp className="w-5 h-5 text-purple-600" />
+                  </button>
+                </div>
+
+                {/* To Chain */}
+                <ChainSelector
+                  selectedChainId={toChainId}
+                  onSelect={setToChainId}
+                  label="To Chain"
+                  excludeChainId={fromChainId}
+                />
+
+                {/* Amount Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Amount
+                  </label>
+                  <div className="flex items-center gap-3 p-4 bg-white border-2 border-gray-200 rounded-xl focus-within:border-purple-500 transition-colors">
+                    <input
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="flex-1 text-2xl font-semibold bg-transparent outline-none"
+                      step="0.01"
+                      min="0"
+                    />
+                    <TokenSelector
+                      selectedToken={selectedToken}
+                      onSelect={setSelectedToken}
+                    />
+                  </div>
+                </div>
+
+                {/* Bridge Button */}
+                <button
+                  onClick={handleBridge}
+                  disabled={
+                    !isConnected ||
+                    !amount ||
+                    Number(amount) <= 0 ||
+                    routes.length === 0 ||
+                    selectedRoute === null ||
+                    !contractsDeployed
+                  }
+                  className={`w-full py-4 rounded-xl font-semibold text-lg transition-all ${
+                    isConnected &&
+                    amount &&
+                    Number(amount) > 0 &&
+                    routes.length > 0 &&
+                    contractsDeployed
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl active:scale-98'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {!isConnected
+                    ? 'Connect Wallet'
+                    : !contractsDeployed
+                    ? 'Deploy Contracts First'
+                    : !amount || Number(amount) <= 0
+                    ? 'Enter Amount'
+                    : routes.length === 0
+                    ? 'No Routes Available'
+                    : 'Execute Bridge'}
+                </button>
+
+                {/* Info */}
+                {contractsDeployed && isConnected && (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
+                    <Info className="w-4 h-4 text-blue-600" />
+                    <span>Connected to {chain?.name || 'Unknown network'}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Routes & Stats */}
+          <div className="space-y-6">
+            {/* Routes Display */}
+            {isConnected && amount && Number(amount) > 0 && routes.length > 0 && (
+              <>
+                <RouteDisplay
+                  routes={routes}
+                  loading={loadingRoutes}
+                  selectedRoute={selectedRoute}
+                  onSelectRoute={setSelectedRoute}
+                />
+
+                {/* Route Comparison */}
+                {routes.length >= 2 && (
+                  <RouteComparison routes={routes} />
+                )}
+
+                {/* Savings Display */}
+                {bestCostRoute && worstCostRoute && routes.length >= 2 && (
+                  <SavingsDisplay
+                    bestRoute={bestCostRoute}
+                    worstRoute={worstCostRoute}
+                  />
+                )}
+              </>
+            )}
+
+            {/* Empty State */}
+            {(!amount || Number(amount) <= 0) && (
+              <div className="bg-white rounded-xl border-2 border-gray-200 p-8 text-center">
+                <div className="text-4xl mb-3">🔍</div>
+                <h3 className="font-semibold text-gray-900 mb-2">
+                  Enter Amount
+                </h3>
+                <p className="text-sm text-gray-600">
+                  Enter an amount to see available routes and compare costs
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Transaction Progress Modal */}
+      <TransactionProgress
+        status={txStatus}
+        txHash={txHash}
+        error={txError}
+        onClose={handleCloseProgress}
+      />
+    </div>
+  );
+}

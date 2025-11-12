@@ -1,0 +1,13 @@
+[build]
+target = "wasm32-unknown-unknown"
+
+[unstable]
+build-std = ["core", "alloc"]
+
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-C", "opt-level=z",
+    # "-C", "lto=fat",
+    "-C", "embed-bitcode=yes",
+]
+

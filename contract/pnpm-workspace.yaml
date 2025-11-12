@@ -1,0 +1,4 @@
+onlyBuiltDependencies:
+  - '@arbitrum/nitro-contracts'
+  - keccak
+  - secp256k1
