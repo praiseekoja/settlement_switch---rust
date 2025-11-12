@@ -1,0 +1,18 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  experimental: {
+    turbo: {
+      rules: {},
+      resolveAlias: {},
+      loaders: {},
+      esmExternals: false,
+      // 👇 fully disable Turbopack
+      disable: true,
+    },
+  },
+  webpack: (config) => {
+    return config; // explicitly use Webpack
+  },
+};
+
+export default nextConfig;
