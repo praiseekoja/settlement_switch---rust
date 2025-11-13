@@ -176,7 +176,7 @@ function StylusDemoPage() {
   };
 
   const handleIncrement = async () => {
-    if (!ensureReady()) {
+    if (!ensureReady() || !contractAddress) {
       return;
     }
 
@@ -196,7 +196,7 @@ function StylusDemoPage() {
   };
 
   const handleSetCounter = async () => {
-    if (!ensureReady()) {
+    if (!ensureReady() || !contractAddress) {
       return;
     }
 
