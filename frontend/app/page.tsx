@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseUnits, formatUnits } from 'viem';
-import { ArrowDownUp, Info } from 'lucide-react';
+import { ArrowDownUp, Info, Loader2, PenSquare, Plus, RefreshCcw } from 'lucide-react';
 import ChainSelector from './components/ChainSelector';
 import TokenSelector from './components/TokenSelector';
 import RouteDisplay from './components/RouteDisplay';
@@ -11,7 +11,14 @@ import TransactionProgress from './components/TransactionProgress';
 import OptimizationSlider from './components/OptimizationSlider';
 import SavingsDisplay from './components/SavingsDisplay';
 import RouteComparison from './components/RouteComparison';
-import { CONTRACTS, SUPPORTED_CHAINS, TOKENS } from './config';
+import {
+  CONTRACTS,
+  ENABLE_STYLUS_MODE,
+  STYLUS_CONTRACT_ADDRESS,
+  SUPPORTED_CHAINS,
+  TOKENS,
+} from './config';
+import { SETTLEMENT_SWITCH_ABI } from './contracts/settlementSwitch';
 
 // Router ABI (minimal - update with full ABI after contract deployment)
 const ROUTER_ABI = [
@@ -78,8 +85,283 @@ const ERC20_ABI = [
 ] as const;
 
 type TransactionStatus = 'idle' | 'initiating' | 'confirming' | 'bridging' | 'success' | 'error';
+type StylusStatus = 'idle' | 'pending' | 'confirming' | 'success' | 'error';
 
-export default function BridgePage() {
+export default function Page() {
+  return ENABLE_STYLUS_MODE ? <StylusDemoPage /> : <LegacyBridgePage />;
+}
+
+function StylusDemoPage() {
+  const { address, isConnected, chain } = useAccount();
+  const [inputValue, setInputValue] = useState('');
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [txStatus, setTxStatus] = useState<StylusStatus>('idle');
+  const [txError, setTxError] = useState<string>();
+  const [lastAction, setLastAction] = useState<'increment' | 'set' | null>(null);
+
+  const contractAddress = STYLUS_CONTRACT_ADDRESS;
+
+  const {
+    data: counterData,
+    refetch: refetchCounter,
+    status: counterStatus,
+    fetchStatus: counterFetchStatus,
+  } = useReadContract({
+    address: contractAddress,
+    abi: SETTLEMENT_SWITCH_ABI,
+    functionName: 'getCounter',
+    query: {
+      enabled: Boolean(contractAddress),
+    },
+  });
+
+  const isCounterLoading =
+    counterStatus === 'pending' || counterFetchStatus === 'fetching';
+
+  const { writeContract: sendTransaction, data: pendingHash } = useWriteContract();
+
+  useEffect(() => {
+    if (pendingHash) {
+      setTxHash(pendingHash);
+    }
+  }, [pendingHash]);
+
+  const {
+    isLoading: isConfirming,
+    isSuccess: isConfirmed,
+  } = useWaitForTransactionReceipt({
+    hash: txHash,
+    query: {
+      enabled: Boolean(txHash),
+    },
+  });
+
+  useEffect(() => {
+    if (txHash) {
+      setTxStatus(isConfirming ? 'confirming' : 'pending');
+    }
+  }, [isConfirming, txHash]);
+
+  useEffect(() => {
+    if (isConfirmed) {
+      setTxStatus('success');
+      setTxHash(undefined);
+      setInputValue('');
+      refetchCounter();
+      const timeout = setTimeout(() => {
+        setTxStatus('idle');
+        setLastAction(null);
+      }, 2500);
+      return () => clearTimeout(timeout);
+    }
+    return;
+  }, [isConfirmed, refetchCounter]);
+
+  const parsedCounter =
+    counterData !== undefined ? counterData.toString() : undefined;
+
+  const ensureReady = () => {
+    if (!contractAddress) {
+      setTxError('Contract address is not configured. Set NEXT_PUBLIC_STYLUS_CONTRACT_ADDRESS.');
+      return false;
+    }
+    if (!isConnected || !address) {
+      setTxError('Connect your wallet to interact with the contract.');
+      return false;
+    }
+    setTxError(undefined);
+    return true;
+  };
+
+  const handleIncrement = async () => {
+    if (!ensureReady()) {
+      return;
+    }
+
+    try {
+      setTxStatus('pending');
+      setLastAction('increment');
+      await sendTransaction({
+        address: contractAddress,
+        abi: SETTLEMENT_SWITCH_ABI,
+        functionName: 'increment',
+      });
+    } catch (error: any) {
+      console.error('Increment failed:', error);
+      setTxStatus('error');
+      setTxError(error?.message || 'Increment failed');
+    }
+  };
+
+  const handleSetCounter = async () => {
+    if (!ensureReady()) {
+      return;
+    }
+
+    const sanitized = inputValue.trim();
+    if (sanitized === '') {
+      setTxError('Enter a value to set.');
+      return;
+    }
+
+    let value: bigint;
+    try {
+      value = BigInt(sanitized);
+    } catch {
+      setTxError('Value must be an integer.');
+      return;
+    }
+
+    try {
+      setTxStatus('pending');
+      setLastAction('set');
+      await sendTransaction({
+        address: contractAddress,
+        abi: SETTLEMENT_SWITCH_ABI,
+        functionName: 'setCounter',
+        args: [value],
+      });
+    } catch (error: any) {
+      console.error('Set counter failed:', error);
+      setTxStatus('error');
+      setTxError(error?.message || 'Set counter failed');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4 sm:p-6">
+      <div className="max-w-3xl mx-auto pt-10 space-y-6">
+        <div className="text-center space-y-3">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            Settlement Switch Stylus
+          </h1>
+          <p className="text-gray-600">
+            Interact with the Stylus-deployed <span className="font-semibold text-purple-600">SettlementSwitch</span> contract by reading and updating its on-chain counter.
+          </p>
+        </div>
+
+        {!contractAddress && (
+          <div className="p-4 bg-amber-50 border-2 border-amber-200 rounded-xl text-amber-900 text-sm">
+            <strong className="block mb-1">Missing contract address</strong>
+            Set <code className="bg-amber-100 px-2 py-1 rounded">NEXT_PUBLIC_STYLUS_CONTRACT_ADDRESS</code> to the deployed Stylus contract address.
+          </div>
+        )}
+
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-xl p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">Counter</h2>
+              <p className="text-sm text-gray-500">
+                Current value stored in Stylus contract
+              </p>
+            </div>
+            <button
+              onClick={() => refetchCounter()}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-200 text-purple-600 hover:bg-purple-50 transition"
+              disabled={isCounterLoading}
+            >
+              {isCounterLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCcw className="w-4 h-4" />
+              )}
+              <span className="text-sm font-medium">Refresh</span>
+            </button>
+          </div>
+
+          <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl p-6 flex flex-col items-center gap-2">
+            <span className="uppercase tracking-wide text-xs text-purple-100">
+              Current Counter
+            </span>
+            <span className="text-6xl font-bold">
+              {parsedCounter ?? '—'}
+            </span>
+            <span className="text-sm text-purple-100">
+              {isConnected ? `Connected as ${address.slice(0, 6)}…${address.slice(-4)}` : 'Connect wallet to interact'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              onClick={handleIncrement}
+              disabled={!contractAddress || !isConnected || txStatus === 'pending' || txStatus === 'confirming'}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              <Plus className="w-5 h-5" />
+              Increment Counter
+            </button>
+
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="Set counter value"
+                value={inputValue}
+                onChange={(event) => setInputValue(event.target.value)}
+                className="flex-1 rounded-xl border-2 border-gray-200 px-4 py-3 text-sm focus:border-purple-500 focus:outline-none"
+                min="0"
+              />
+              <button
+                onClick={handleSetCounter}
+                disabled={
+                  !contractAddress ||
+                  !isConnected ||
+                  inputValue.trim() === '' ||
+                  txStatus === 'pending' ||
+                  txStatus === 'confirming'
+                }
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-purple-600 border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 disabled:opacity-60 disabled:cursor-not-allowed transition"
+              >
+                <PenSquare className="w-5 h-5" />
+                Set Counter
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm space-y-2">
+            <div className="flex items-center gap-2 text-gray-600">
+              <Info className="w-4 h-4 text-purple-500" />
+              <span>
+                Transactions are executed against the Stylus contract on Arbitrum. Ensure your wallet is connected to the correct network.
+              </span>
+            </div>
+            {chain && (
+              <div className="text-xs text-gray-500">
+                Current network: <span className="font-semibold text-gray-700">{chain.name}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-purple-100 bg-purple-50 p-4 text-sm space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-purple-700">Status:</span>
+              <span className="text-purple-700 capitalize">{txStatus}</span>
+              {txStatus === 'pending' || txStatus === 'confirming' ? (
+                <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+              ) : null}
+            </div>
+            {lastAction && (
+              <div className="text-xs text-purple-700">
+                Last action: {lastAction === 'increment' ? 'Increment counter' : 'Set counter value'}
+              </div>
+            )}
+            {txError && (
+              <div className="text-xs text-rose-600">
+                {txError}
+              </div>
+            )}
+            {txHash && (
+              <div className="text-xs text-purple-600 break-all">
+                Tx hash: {txHash}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegacyBridgePage() {
   const { address, isConnected, chain } = useAccount();
   
   // State

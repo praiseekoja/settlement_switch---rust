@@ -1,5 +1,6 @@
 use alloy_primitives::{Address, U256};
-use stylus_sdk::{prelude::*, storage::StorageMap};
+use alloc::{string::String, vec::Vec};
+use stylus_sdk::{msg, prelude::*, storage::StorageMap};
 
 use super::{BridgeRoute, IBridgeAdapter};
 

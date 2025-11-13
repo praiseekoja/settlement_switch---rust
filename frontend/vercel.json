@@ -1,11 +1,6 @@
 {
-  "buildCommand": "cd frontend && NEXT_WEBPACK_BUILD=1 next build",
+  "buildCommand": "pnpm run build",
   "framework": "nextjs",
-  "installCommand": "cd frontend && npm install",
-  "outputDirectory": "frontend/.next",
-  "build": {
-    "env": {
-      "NEXT_WEBPACK_BUILD": "1"
-    }
-  }
+  "installCommand": "pnpm install",
+  "outputDirectory": ".next"
 }

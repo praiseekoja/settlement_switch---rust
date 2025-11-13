@@ -1,10 +1,15 @@
 mod stargate;
 mod mock;
+mod hop;
+mod across;
 
 pub use stargate::StargateAdapter;
 pub use mock::MockBridgeAdapter;
+pub use hop::HopBridgeAdapter;
+pub use across::AcrossBridgeAdapter;
 
 use alloy_primitives::{Address, U256};
+use alloc::{string::String, vec::Vec};
 
 /// Bridge Route information
 #[derive(Debug)]

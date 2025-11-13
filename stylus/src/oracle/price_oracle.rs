@@ -6,6 +6,7 @@ use stylus_sdk::{
     prelude::*,
     storage::StorageMap,
 };
+use crate::chainlink::ChainlinkPriceFeed;
 
 #[sol_event]
 pub struct TokenPriceFeedSet {

@@ -2,6 +2,14 @@ import { createConfig, http } from 'wagmi'
 import { arbitrumSepolia, polygonAmoy } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
+export const ENABLE_STYLUS_MODE = process.env.NEXT_PUBLIC_ENABLE_STYLUS === 'true'
+export const STYLUS_CONTRACT_ADDRESS = process.env
+  .NEXT_PUBLIC_STYLUS_CONTRACT_ADDRESS as `0x${string}` | undefined
+
+// Stylus Router (full bridge implementation)
+export const STYLUS_ROUTER_ADDRESS = process.env
+  .NEXT_PUBLIC_STYLUS_ROUTER_ADDRESS as `0x${string}` | undefined
+
 // Testnet configuration for Settlement Switch
 export const config = getDefaultConfig({
   appName: 'Settlement Switch',
