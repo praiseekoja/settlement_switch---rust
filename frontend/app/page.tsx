@@ -279,7 +279,7 @@ function StylusDemoPage() {
               {parsedCounter ?? '—'}
             </span>
             <span className="text-sm text-purple-100">
-              {isConnected ? `Connected as ${address.slice(0, 6)}…${address.slice(-4)}` : 'Connect wallet to interact'}
+              {isConnected && address ? `Connected as ${address.slice(0, 6)}…${address.slice(-4)}` : 'Connect wallet to interact'}
             </span>
           </div>
 
