@@ -15,13 +15,15 @@ import {
   CONTRACTS,
   ENABLE_STYLUS_MODE,
   STYLUS_CONTRACT_ADDRESS,
+  STYLUS_ROUTER_ADDRESS,
   SUPPORTED_CHAINS,
   TOKENS,
 } from './config';
 import { SETTLEMENT_SWITCH_ABI } from './contracts/settlementSwitch';
+import { SETTLEMENT_SWITCH_ROUTER_ABI } from './contracts/settlementSwitchRouter';
 
-// Router ABI (minimal - update with full ABI after contract deployment)
-const ROUTER_ABI = [
+// Solidity Router ABI (for legacy mode)
+const SOLIDITY_ROUTER_ABI = [
   {
     name: 'getRoutes',
     type: 'function',
@@ -377,10 +379,16 @@ function LegacyBridgePage() {
   const [txHash, setTxHash] = useState<string>();
   const [txError, setTxError] = useState<string>();
 
+  // Determine which router to use
+  const useStylusRouter = ENABLE_STYLUS_MODE && STYLUS_ROUTER_ADDRESS;
+  const ROUTER_ABI = useStylusRouter ? SETTLEMENT_SWITCH_ROUTER_ABI : SOLIDITY_ROUTER_ABI;
+
   // Get contract addresses
   const fromChainContracts = CONTRACTS[fromChainId as keyof typeof CONTRACTS];
   const tokenAddress = fromChainContracts?.[`mock${selectedToken}` as keyof typeof fromChainContracts] as `0x${string}`;
-  const routerAddress = fromChainContracts?.router as `0x${string}`;
+  const routerAddress = useStylusRouter 
+    ? STYLUS_ROUTER_ADDRESS 
+    : (fromChainContracts?.router as `0x${string}`);
 
   // Contract writes
   const { writeContract: approve } = useWriteContract();
@@ -409,13 +417,27 @@ function LegacyBridgePage() {
     address: routerAddress,
     abi: ROUTER_ABI,
     functionName: 'getRoutes',
-    args: address && amount && Number(amount) > 0 ? [{
-      fromChain: BigInt(fromChainId),
-      toChain: BigInt(toChainId),
-      token: tokenAddress,
-      amount: parseUnits(amount, tokenDecimals),
-      recipient: address,
-    }] : undefined,
+    args: address && amount && Number(amount) > 0 
+      ? useStylusRouter
+        ? [
+            // Stylus: individual parameters
+            BigInt(fromChainId),
+            BigInt(toChainId),
+            tokenAddress,
+            parseUnits(amount, tokenDecimals),
+            address,
+          ]
+        : [
+            // Solidity: tuple parameter
+            {
+              fromChain: BigInt(fromChainId),
+              toChain: BigInt(toChainId),
+              token: tokenAddress,
+              amount: parseUnits(amount, tokenDecimals),
+              recipient: address,
+            }
+          ]
+      : undefined,
     query: {
       enabled: Boolean(address && amount && Number(amount) > 0 && isConnected),
     },
@@ -588,6 +610,14 @@ function LegacyBridgePage() {
           <p className="text-gray-600 text-lg">
             Intelligent cross-chain router that finds the <span className="font-semibold text-purple-600">cheapest & fastest</span> path
           </p>
+          {useStylusRouter && (
+            <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-100 to-indigo-100 border-2 border-purple-300 rounded-full">
+              <div className="w-2 h-2 bg-purple-600 rounded-full animate-pulse"></div>
+              <span className="text-sm font-semibold text-purple-900">
+                ⚡ Powered by Arbitrum Stylus (10x cheaper gas)
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Warning if contracts not deployed */}
