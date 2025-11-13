@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useContractRead, useContractWrite, useNetwork } from 'wagmi';
+import { useAccount, useChainId, useReadContract, useWriteContract } from 'wagmi';
 import { CONTRACTS } from '../config';
 import { ROUTER_ABI } from '../contracts/router';
 
@@ -23,38 +23,40 @@ export interface RouteInfo {
 }
 
 export function useRouter() {
-  const { chain } = useNetwork();
+  const chainId = useChainId();
+  const { address, isConnected } = useAccount();
   const [routerAddress, setRouterAddress] = useState<`0x${string}`>();
 
   // Update router address when chain changes
   useEffect(() => {
-    if (chain?.id && CONTRACTS[chain.id]?.router) {
-      setRouterAddress(CONTRACTS[chain.id].router as `0x${string}`);
+    if (chainId && CONTRACTS[chainId]?.router) {
+      setRouterAddress(CONTRACTS[chainId].router as `0x${string}`);
     }
-  }, [chain]);
+  }, [chainId]);
 
   // Get best route
   const useFindBestRoute = (request?: TransferRequest) => {
-    return useContractRead({
+    return useReadContract({
       address: routerAddress,
       abi: ROUTER_ABI,
       functionName: 'findBestRoute',
       args: request ? [request] : undefined,
-      enabled: !!routerAddress && !!request,
+      query: {
+        enabled: !!routerAddress && !!request && isConnected,
+      },
     });
   };
 
   // Execute transfer
   const useExecuteTransfer = () => {
-    return useContractWrite({
-      address: routerAddress,
-      abi: ROUTER_ABI,
-      functionName: 'executeTransfer',
-    });
+    return useWriteContract();
   };
 
   return {
     routerAddress,
+    chainId,
+    address,
+    isConnected,
     useFindBestRoute,
     useExecuteTransfer,
   };
