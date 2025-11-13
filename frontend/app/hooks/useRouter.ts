@@ -29,8 +29,8 @@ export function useRouter() {
 
   // Update router address when chain changes
   useEffect(() => {
-    if (chainId && CONTRACTS[chainId]?.router) {
-      setRouterAddress(CONTRACTS[chainId].router as `0x${string}`);
+    if (chainId && CONTRACTS[chainId as keyof typeof CONTRACTS]?.router) {
+      setRouterAddress(CONTRACTS[chainId as keyof typeof CONTRACTS].router as `0x${string}`);
     }
   }, [chainId]);
 
