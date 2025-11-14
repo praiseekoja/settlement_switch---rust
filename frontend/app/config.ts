@@ -1,4 +1,5 @@
-import { createConfig, http } from 'wagmi'
+import { createConfig, createStorage, cookieStorage, http } from 'wagmi'
+import type { CreateConnectorFn } from 'wagmi'
 import { arbitrumSepolia, polygonAmoy } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
@@ -10,17 +11,38 @@ export const STYLUS_CONTRACT_ADDRESS = process.env
 export const STYLUS_ROUTER_ADDRESS = process.env
   .NEXT_PUBLIC_STYLUS_ROUTER_ADDRESS as `0x${string}` | undefined
 
-// Testnet configuration for Settlement Switch
-export const config = getDefaultConfig({
-  appName: 'Settlement Switch',
-  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'c3a3d3e3f3g3h3i3j3k3l3m3n3o3p3q3', // Optional: Get real one from https://cloud.walletconnect.com
-  chains: [arbitrumSepolia, polygonAmoy],
+const CHAINS = [arbitrumSepolia, polygonAmoy] as const
+const TRANSPORTS = {
+  [arbitrumSepolia.id]: http('https://sepolia-rollup.arbitrum.io/rpc'),
+  [polygonAmoy.id]: http('https://rpc-amoy.polygon.technology'),
+} as const
+
+const WALLETCONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
+  'c3a3d3e3f3g3h3i3j3k3l3m3n3o3p3q3' // Optional: Get real one from https://cloud.walletconnect.com
+
+const EMPTY_CONNECTORS: readonly CreateConnectorFn[] = []
+
+const serverConfig = createConfig({
+  chains: CHAINS,
+  transports: TRANSPORTS,
   ssr: true,
-  transports: {
-    [arbitrumSepolia.id]: http('https://sepolia-rollup.arbitrum.io/rpc'),
-    [polygonAmoy.id]: http('https://rpc-amoy.polygon.technology'),
-  },
+  connectors: EMPTY_CONNECTORS,
 })
+
+const createClientConfig = () =>
+  getDefaultConfig({
+    appName: 'Settlement Switch',
+    projectId: WALLETCONNECT_PROJECT_ID,
+    chains: CHAINS,
+    ssr: true,
+    transports: TRANSPORTS,
+    storage: createStorage({
+      storage: cookieStorage,
+    }),
+  })
+
+export const config = typeof window === 'undefined' ? serverConfig : createClientConfig()
 
 // Contract addresses (UPDATE THESE AFTER DEPLOYMENT)
 export const CONTRACTS = {
@@ -40,6 +62,8 @@ export const CONTRACTS = {
 
 // Supported chains for the app
 export const SUPPORTED_CHAINS = [arbitrumSepolia, polygonAmoy]
+
+export type ChainId = (typeof SUPPORTED_CHAINS)[number]['id']
 
 // Chain display info
 export const CHAIN_INFO = {

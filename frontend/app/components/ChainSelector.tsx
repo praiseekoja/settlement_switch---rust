@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { CHAIN_INFO, SUPPORTED_CHAINS } from "../config";
+import { CHAIN_INFO, SUPPORTED_CHAINS, ChainId } from "../config";
 
 interface ChainSelectorProps {
-  selectedChainId: number;
-  onSelect: (chainId: number) => void;
+  selectedChainId: ChainId;
+  onSelect: (chainId: ChainId) => void;
   label: string;
-  excludeChainId?: number;
+  excludeChainId?: ChainId;
 }
 
 export default function ChainSelector({
@@ -27,7 +27,7 @@ export default function ChainSelector({
     (chain) => chain.id === selectedChainId
   );
   const chainInfo = selectedChain
-    ? CHAIN_INFO[selectedChain.id]
+    ? CHAIN_INFO[selectedChain.id as ChainId]
     : { name: "Select Chain", icon: "⚪", color: "gray" };
 
   return (
@@ -69,7 +69,7 @@ export default function ChainSelector({
                 <button
                   key={chain.id}
                   onClick={() => {
-                    onSelect(chain.id);
+                    onSelect(chain.id as ChainId);
                     setIsOpen(false);
                   }}
                   className="w-full flex items-center gap-3 p-4 hover:bg-purple-50 transition-colors border-b border-gray-100 last:border-b-0"

@@ -14,6 +14,7 @@ import RouteComparison from './components/RouteComparison';
 import {
   CONTRACTS,
   ENABLE_STYLUS_MODE,
+  ChainId,
   STYLUS_CONTRACT_ADDRESS,
   STYLUS_ROUTER_ADDRESS,
   SUPPORTED_CHAINS,
@@ -367,8 +368,8 @@ function LegacyBridgePage() {
   const { address, isConnected, chain } = useAccount();
   
   // State
-  const [fromChainId, setFromChainId] = useState(SUPPORTED_CHAINS[0].id);
-  const [toChainId, setToChainId] = useState(SUPPORTED_CHAINS[1].id);
+  const [fromChainId, setFromChainId] = useState<ChainId>(SUPPORTED_CHAINS[0].id as ChainId);
+  const [toChainId, setToChainId] = useState<ChainId>(SUPPORTED_CHAINS[1].id as ChainId);
   const [selectedToken, setSelectedToken] = useState('USDC');
   const [amount, setAmount] = useState('');
   const [routes, setRoutes] = useState<any[]>([]);
@@ -677,7 +678,7 @@ function LegacyBridgePage() {
                 {/* From Chain */}
                 <ChainSelector
                   selectedChainId={fromChainId}
-                  onSelect={setFromChainId}
+                  onSelect={(chainId) => setFromChainId(chainId)}
                   label="From Chain"
                   excludeChainId={toChainId}
                 />
@@ -695,7 +696,7 @@ function LegacyBridgePage() {
                 {/* To Chain */}
                 <ChainSelector
                   selectedChainId={toChainId}
-                  onSelect={setToChainId}
+                  onSelect={(chainId) => setToChainId(chainId)}
                   label="To Chain"
                   excludeChainId={fromChainId}
                 />
