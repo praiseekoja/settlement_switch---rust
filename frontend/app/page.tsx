@@ -251,13 +251,13 @@ export default function Page() {
       });
 
       console.log('✅ Bridge transaction:', bridgeTxHash);
-      setTxStatus('bridging');
-
-      // Wait a moment for transaction to be mined
-      setTimeout(() => {
-        setTxStatus('success');
-        setTxHash(bridgeTxHash);
-      }, 2000);
+      
+      // Show success immediately - transaction is submitted
+      setTxStatus('success');
+      setTxHash(bridgeTxHash);
+      
+      console.log('🎉 Transaction submitted successfully!');
+      console.log('View on Arbiscan:', `https://sepolia.arbiscan.io/tx/${bridgeTxHash}`);
 
     } catch (error: any) {
       console.error('❌ Bridge error:', error);
