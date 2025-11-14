@@ -3,14 +3,6 @@ import type { CreateConnectorFn } from 'wagmi'
 import { arbitrumSepolia, polygonAmoy } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
-export const ENABLE_STYLUS_MODE = process.env.NEXT_PUBLIC_ENABLE_STYLUS === 'true'
-export const STYLUS_CONTRACT_ADDRESS = process.env
-  .NEXT_PUBLIC_STYLUS_CONTRACT_ADDRESS as `0x${string}` | undefined
-
-// Stylus Router (full bridge implementation)
-export const STYLUS_ROUTER_ADDRESS = process.env
-  .NEXT_PUBLIC_STYLUS_ROUTER_ADDRESS as `0x${string}` | undefined
-
 const CHAINS = [arbitrumSepolia, polygonAmoy] as const
 const TRANSPORTS = {
   [arbitrumSepolia.id]: http('https://sepolia-rollup.arbitrum.io/rpc'),
@@ -47,7 +39,7 @@ export const config = typeof window === 'undefined' ? serverConfig : createClien
 // Contract addresses (UPDATE THESE AFTER DEPLOYMENT)
 export const CONTRACTS = {
   [arbitrumSepolia.id]: {
-    router: '0x1D6Ca4D34E0533e0A04Bc39B04275f812d36C229', // UPDATE AFTER DEPLOYMENT
+    router: '0x443ec868aafd6eba80d124a8cb4345cc827e7ee1', // Stylus Router Contract
     priceOracle: '0x283a192277871721Cdc57736687703902B6D4EDB',
     mockUSDC: '0xcb5CC1A9090CF15333CD85e792901AAEeF63bF52',
     mockUSDT: '0xF104FF2252E003eb6B51f1539Fbb141354Ecd592',

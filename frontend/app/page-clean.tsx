@@ -18,18 +18,24 @@ import {
   TOKENS,
 } from './config';
 
-// Stylus Router ABI
+// Router ABI
 const ROUTER_ABI = [
   {
-    name: 'get_routes',
+    name: 'getRoutes',
     type: 'function',
     stateMutability: 'view',
     inputs: [
-      { name: '_from_chain', type: 'uint256' },
-      { name: '_to_chain', type: 'uint256' },
-      { name: '_token', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-      { name: '_recipient', type: 'address' },
+      {
+        components: [
+          { name: 'fromChain', type: 'uint256' },
+          { name: 'toChain', type: 'uint256' },
+          { name: 'token', type: 'address' },
+          { name: 'amount', type: 'uint256' },
+          { name: 'recipient', type: 'address' },
+        ],
+        name: 'request',
+        type: 'tuple',
+      },
     ],
     outputs: [
       {
@@ -43,21 +49,22 @@ const ROUTER_ABI = [
           { name: 'amountOut', type: 'uint256' },
           { name: 'available', type: 'bool' },
         ],
+        name: 'routes',
         type: 'tuple[]',
       },
     ],
   },
   {
-    name: 'execute_best_route',
+    name: 'executeBestRoute',
     type: 'function',
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
     inputs: [
-      { name: '_to_chain', type: 'uint256' },
-      { name: '_token', type: 'address' },
+      { name: 'toChain', type: 'uint256' },
+      { name: 'token', type: 'address' },
       { name: 'amount', type: 'uint256' },
       { name: 'recipient', type: 'address' },
     ],
-    outputs: [{ name: '', type: 'bool' }],
+    outputs: [{ name: 'success', type: 'bool' }],
   },
 ] as const;
 
@@ -124,14 +131,16 @@ export default function Page() {
   const { data: routesData, refetch: refetchRoutes } = useReadContract({
     address: routerAddress,
     abi: ROUTER_ABI,
-    functionName: 'get_routes',
+    functionName: 'getRoutes',
     args: address && amount && Number(amount) > 0 
       ? [
-          BigInt(fromChainId),
-          BigInt(toChainId),
-          tokenAddress,
-          parseUnits(amount, tokenDecimals),
-          address,
+          {
+            fromChain: BigInt(fromChainId),
+            toChain: BigInt(toChainId),
+            token: tokenAddress,
+            amount: parseUnits(amount, tokenDecimals),
+            recipient: address,
+          }
         ]
       : undefined,
     query: {
@@ -248,7 +257,7 @@ export default function Page() {
       await bridge({
         address: routerAddress,
         abi: ROUTER_ABI,
-        functionName: 'execute_best_route',
+        functionName: 'executeBestRoute',
         args: [
           BigInt(toChainId),
           tokenAddress,
