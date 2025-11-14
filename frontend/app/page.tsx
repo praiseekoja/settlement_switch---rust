@@ -18,10 +18,10 @@ import {
   TOKENS,
 } from './config';
 
-// Stylus Router ABI
+// Stylus Router ABI (camelCase for Stylus contracts)
 const ROUTER_ABI = [
   {
-    name: 'get_routes',
+    name: 'getRoutes',
     type: 'function',
     stateMutability: 'view',
     inputs: [
@@ -48,7 +48,7 @@ const ROUTER_ABI = [
     ],
   },
   {
-    name: 'execute_best_route',
+    name: 'executeBestRoute',
     type: 'function',
     stateMutability: 'nonpayable',
     inputs: [
@@ -124,7 +124,7 @@ export default function Page() {
   const { data: routesData, refetch: refetchRoutes } = useReadContract({
     address: routerAddress,
     abi: ROUTER_ABI,
-    functionName: 'get_routes',
+    functionName: 'getRoutes',
     args: address && amount && Number(amount) > 0 
       ? [
           BigInt(fromChainId),
@@ -248,7 +248,7 @@ export default function Page() {
       await bridge({
         address: routerAddress,
         abi: ROUTER_ABI,
-        functionName: 'execute_best_route',
+        functionName: 'executeBestRoute',
         args: [
           BigInt(toChainId),
           tokenAddress,

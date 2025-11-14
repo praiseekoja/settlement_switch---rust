@@ -78,18 +78,32 @@ impl SettlementSwitch {
         let mut routes = Vec::new();
         let adapter_count = self.adapter_count.get();
 
-        // Return mock route if we have adapters
+        // Return one mock route per adapter
         if adapter_count > U256::ZERO {
-            routes.push((
-                Address::ZERO, // Mock adapter address
-                String::from("Mock Bridge"),
-                U256::from(300),                    // estimated_time
-                U256::from(100_000),                // estimated_gas_cost
-                amount / U256::from(1000),          // bridge_fee (0.1%)
-                U256::from(1_000_000),              // total_cost_usd ($0.01 with 8 decimals)
-                amount - (amount / U256::from(1000)), // amount_out
-                true,                                // available
-            ));
+            let count = adapter_count.as_limbs()[0] as usize;
+            for i in 0..count {
+                let bridge_name = match i {
+                    0 => String::from("Stargate"),
+                    1 => String::from("Hop Protocol"),
+                    2 => String::from("Across Protocol"),
+                    _ => String::from("Mock Bridge"),
+                };
+                
+                // Vary the costs slightly for each bridge
+                let time_multiplier = U256::from(1 + i as u64);
+                let cost_multiplier = U256::from(1 + (i as u64 * 2));
+                
+                routes.push((
+                    Address::ZERO, // Mock adapter address
+                    bridge_name,
+                    U256::from(300) * time_multiplier,                    // estimated_time (5-15 min)
+                    U256::from(100_000) * cost_multiplier,                // estimated_gas_cost
+                    amount / U256::from(1000),                            // bridge_fee (0.1%)
+                    U256::from(1_000_000) * cost_multiplier,              // total_cost_usd
+                    amount - (amount / U256::from(1000)),                 // amount_out
+                    true,                                                  // available
+                ));
+            }
         }
 
         Ok(routes)
