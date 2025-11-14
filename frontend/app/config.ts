@@ -5,7 +5,7 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
 const CHAINS = [arbitrumSepolia, polygonAmoy] as const
 const TRANSPORTS = {
-  [arbitrumSepolia.id]: http('https://sepolia-rollup.arbitrum.io/rpc'),
+  [arbitrumSepolia.id]: http('https://arb-sepolia.g.alchemy.com/v2/demo'),
   [polygonAmoy.id]: http('https://rpc-amoy.polygon.technology'),
 } as const
 
