@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd frontend && pnpm run build",
+  "buildCommand": "pnpm --prefix frontend install && pnpm --prefix frontend run build",
   "outputDirectory": "frontend/.next",
-  "installCommand": "cd frontend && pnpm install",
+  "installCommand": "echo 'Installing dependencies'",
   "framework": "nextjs"
 }
 
