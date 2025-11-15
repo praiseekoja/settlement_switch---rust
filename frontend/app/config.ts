@@ -5,8 +5,8 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
 const CHAINS = [arbitrumSepolia, polygonAmoy] as const
 const TRANSPORTS = {
-  [arbitrumSepolia.id]: http('https://arb-sepolia.g.alchemy.com/v2/demo'),
-  [polygonAmoy.id]: http('https://rpc-amoy.polygon.technology'),
+  [arbitrumSepolia.id]: http('https://arb-sepolia.g.alchemy.com/v2/eyL8PDLbOo4xUE59IzB_a'),
+  [polygonAmoy.id]: http('https://polygon-amoy.g.alchemy.com/v2/eyL8PDLbOo4xUE59IzB_a'),
 } as const
 
 const WALLETCONNECT_PROJECT_ID ='c70427ae3b36182a89e4cb68148c73f7'
