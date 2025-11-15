@@ -9,9 +9,9 @@ const TRANSPORTS = {
   [polygonAmoy.id]: http('https://rpc-amoy.polygon.technology'),
 } as const
 
-const WALLETCONNECT_PROJECT_ID =
+const WALLETCONNECT_PROJECT_ID ='c70427ae3b36182a89e4cb68148c73f7'
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
-  'c3a3d3e3f3g3h3i3j3k3l3m3n3o3p3q3' // Optional: Get real one from https://cloud.walletconnect.com
+  'c70427ae3b36182a89e4cb68148c73f7' // Optional: Get real one from https://cloud.walletconnect.com
 
 const EMPTY_CONNECTORS: readonly CreateConnectorFn[] = []
 
