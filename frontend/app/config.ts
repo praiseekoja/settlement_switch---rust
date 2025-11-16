@@ -4,14 +4,29 @@ import { arbitrumSepolia, polygonAmoy } from 'wagmi/chains'
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 
 const CHAINS = [arbitrumSepolia, polygonAmoy] as const
+
+// Prefer env-provided endpoints; fall back to Alchemy with shared key; then fall back to public RPCs; finally to existing hardcoded URLs.
+const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY
+const PUBLIC_RPC_ARB_SEPOLIA = 'https://sepolia-rollup.arbitrum.io/rpc'
+const PUBLIC_RPC_POLYGON_AMOY = 'https://rpc-amoy.polygon.technology'
+const RPC_ARB_SEPOLIA =
+  process.env.NEXT_PUBLIC_RPC_ARB_SEPOLIA ||
+  (ALCHEMY_KEY ? `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}` : PUBLIC_RPC_ARB_SEPOLIA) ||
+  'https://arb-sepolia.g.alchemy.com/v2/eyL8PDLbOo4xUE59IzB_a'
+const RPC_POLYGON_AMOY =
+  process.env.NEXT_PUBLIC_RPC_POLYGON_AMOY ||
+  (ALCHEMY_KEY ? `https://polygon-amoy.g.alchemy.com/v2/${ALCHEMY_KEY}` : PUBLIC_RPC_POLYGON_AMOY) ||
+  'https://polygon-amoy.g.alchemy.com/v2/eyL8PDLbOo4xUE59IzB_a'
+
 const TRANSPORTS = {
-  [arbitrumSepolia.id]: http('https://arb-sepolia.g.alchemy.com/v2/eyL8PDLbOo4xUE59IzB_a'),
-  [polygonAmoy.id]: http('https://polygon-amoy.g.alchemy.com/v2/eyL8PDLbOo4xUE59IzB_a'),
+  [arbitrumSepolia.id]: http(RPC_ARB_SEPOLIA),
+  [polygonAmoy.id]: http(RPC_POLYGON_AMOY),
 } as const
 
-const WALLETCONNECT_PROJECT_ID ='c70427ae3b36182a89e4cb68148c73f7'
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
-  'c70427ae3b36182a89e4cb68148c73f7' // Optional: Get real one from https://cloud.walletconnect.com
+// Read WalletConnect ID from env with safe fallback
+const WALLETCONNECT_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ??
+  'c70427ae3b36182a89e4cb68148c73f7'
 
 const EMPTY_CONNECTORS: readonly CreateConnectorFn[] = []
 
