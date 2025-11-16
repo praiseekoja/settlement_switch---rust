@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useWriteContract, useReadContract, useWaitForTransactionReceipt, usePublicClient } from 'wagmi';
 import { parseUnits, formatUnits } from 'viem';
 import { ArrowDownUp, Info } from 'lucide-react';
 import ChainSelector from './components/ChainSelector';
@@ -101,6 +101,7 @@ export default function Page() {
   // Contract writes
   const { writeContractAsync: approve } = useWriteContract();
   const { writeContractAsync: bridge } = useWriteContract();
+  const publicClient = usePublicClient();
 
   // Get token decimals
   const tokenDecimals = TOKENS.find(t => t.symbol === selectedToken)?.decimals || 6;
@@ -226,6 +227,35 @@ export default function Page() {
       // Skip approval for now - already have some approval set
       // TODO: Re-enable approval in production
       
+      // Ensure wallet is on the correct network
+      if (chain?.id !== fromChainId) {
+        alert(`Please switch network to ${SUPPORTED_CHAINS.find((c) => c.id === fromChainId)?.name || 'source chain'}`);
+        return;
+      }
+
+      // Optional preflight: simulate to ensure the write will succeed
+      try {
+        if (publicClient) {
+          await publicClient.simulateContract({
+            account: address,
+            address: routerAddress,
+            abi: ROUTER_ABI,
+            functionName: 'executeBestRoute',
+            args: [
+              BigInt(toChainId),
+              tokenAddress,
+              amountInWei,
+              address,
+            ],
+          });
+        }
+      } catch (simErr: any) {
+        console.error('❗ Simulation failed:', simErr);
+        setTxStatus('error');
+        setTxError(simErr?.shortMessage || simErr?.message || 'Simulation failed');
+        return;
+      }
+
       setTxStatus('confirming');
 
       console.log('🌉 Executing bridge...', { 
@@ -248,6 +278,9 @@ export default function Page() {
           address,
         ],
         gas: 500000n, // Set explicit gas limit to skip estimation
+        // Hint wallet to use the correct chain/account
+        chainId: fromChainId,
+        account: address,
       });
 
       console.log('✅ Bridge transaction:', bridgeTxHash);
