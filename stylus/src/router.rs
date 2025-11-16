@@ -6,8 +6,42 @@ use stylus_sdk::{
     storage::{StorageMap, StorageVec},
 };
 
-use crate::adapters::{BridgeRoute, IBridgeAdapter};
-use crate::oracle::IPriceOracle;
+use crate::adapters::BridgeRoute;
+
+// External interfaces for adapters and oracle (called by address)
+sol_interface! {
+    interface IBridgeAdapterExternal {
+        function get_bridge_info() external view returns (string, bool);
+        function get_route(
+            uint256 from_chain,
+            uint256 to_chain,
+            address token,
+            uint256 amount
+        ) external view returns (
+            string bridge_name,
+            uint256 estimated_time,
+            uint256 estimated_gas,
+            uint256 fee,
+            bool available
+        );
+        function bridge_tokens(
+            uint256 to_chain,
+            address token,
+            uint256 amount,
+            address recipient,
+            bytes data
+        ) external;
+    }
+}
+
+sol_interface! {
+    interface IPriceOracleExternal {
+        function get_token_price(address token) external view returns (uint256);
+        function get_gas_price(uint256 chain_id) external view returns (uint256);
+        function get_native_token_price(uint256 chain_id) external view returns (uint256);
+        function calculate_gas_cost(uint256 chain_id, uint256 gas_amount) external view returns (uint256);
+    }
+}
 
 #[derive(Debug)]
 pub struct RouteInfo {
@@ -126,7 +160,13 @@ impl StablecoinRouter {
                 request.token,
                 request.amount,
             ) {
-                Ok(r) => r,
+                Ok((bridge_name, estimated_time, estimated_gas, fee, available)) => BridgeRoute {
+                    bridge_name,
+                    estimated_time,
+                    estimated_gas,
+                    fee,
+                    available,
+                },
                 Err(_) => continue, // Skip if route not available
             };
 
@@ -135,7 +175,7 @@ impl StablecoinRouter {
             }
 
             // Calculate total cost
-            let gas_cost = self.price_oracle().calculate_gas_cost(
+            let gas_cost = self.price_oracle()?.calculate_gas_cost(
                 request.to_chain,
                 route.estimated_gas,
             )?;
@@ -177,7 +217,7 @@ impl StablecoinRouter {
 
         // Update statistics
         self.total_transfers += U256::from(1);
-        self.total_volume_usd += self.price_oracle().get_token_price(request.token)?
+        self.total_volume_usd += self.price_oracle()?.get_token_price(request.token)?
             .saturating_mul(request.amount)
             .saturating_div(U256::from(10).pow(U256::from(18)));
 
@@ -190,14 +230,13 @@ impl StablecoinRouter {
         Ok(())
     }
 
-    fn get_bridge_adapter(&self, addr: Address) -> Result<&dyn IBridgeAdapter, Vec<u8>> {
-        // In a real implementation, this would need to properly resolve the contract
-        // and verify it implements IBridgeAdapter
-        unimplemented!()
+    fn get_bridge_adapter(&self, addr: Address) -> Result<IBridgeAdapterExternal, Vec<u8>> {
+        ensure!(self.is_bridge_adapter.get(&addr).unwrap_or(&false), "Adapter not found");
+        Ok(IBridgeAdapterExternal::new(addr))
     }
 
-    fn price_oracle(&self) -> &dyn IPriceOracle {
-        // In a real implementation, this would need to properly resolve the contract
-        unimplemented!()
+    fn price_oracle(&self) -> Result<IPriceOracleExternal, Vec<u8>> {
+        ensure!(self.price_oracle != Address::ZERO, "Oracle not set");
+        Ok(IPriceOracleExternal::new(self.price_oracle))
     }
 }

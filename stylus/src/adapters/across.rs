@@ -135,3 +135,33 @@ impl IBridgeAdapter for AcrossBridgeAdapter {
     }
 }
 
+// Public external interface for router integration
+#[public]
+impl AcrossBridgeAdapter {
+    pub fn get_bridge_info(&self) -> Result<(String, bool), Vec<u8>> {
+        <Self as IBridgeAdapter>::get_bridge_info(self)
+    }
+
+    pub fn get_route(
+        &self,
+        from_chain: U256,
+        to_chain: U256,
+        token: Address,
+        amount: U256,
+    ) -> Result<(String, U256, U256, U256, bool), Vec<u8>> {
+        let r = <Self as IBridgeAdapter>::get_route(self, from_chain, to_chain, token, amount)?;
+        Ok((r.bridge_name, r.estimated_time, r.estimated_gas, r.fee, r.available))
+    }
+
+    pub fn bridge_tokens(
+        &mut self,
+        to_chain: U256,
+        token: Address,
+        amount: U256,
+        recipient: Address,
+        data: Vec<u8>,
+    ) -> Result<(), Vec<u8>> {
+        let _ = data; // unused
+        <Self as IBridgeAdapter>::bridge_tokens(self, to_chain, token, amount, recipient, Vec::new())
+    }
+}

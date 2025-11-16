@@ -137,3 +137,23 @@ impl super::IPriceOracle for PriceOracle {
             .saturating_div(U256::from(10).pow(U256::from(18))))
     }
 }
+
+// Public external interface to match router sol_interface expectations
+#[public]
+impl PriceOracle {
+    pub fn get_token_price(&self, token: Address) -> Result<U256, Vec<u8>> {
+        <Self as super::IPriceOracle>::get_token_price(self, token)
+    }
+
+    pub fn get_gas_price(&self, chain_id: U256) -> Result<U256, Vec<u8>> {
+        <Self as super::IPriceOracle>::get_gas_price(self, chain_id)
+    }
+
+    pub fn get_native_token_price(&self, chain_id: U256) -> Result<U256, Vec<u8>> {
+        <Self as super::IPriceOracle>::get_native_token_price(self, chain_id)
+    }
+
+    pub fn calculate_gas_cost(&self, chain_id: U256, gas_amount: U256) -> Result<U256, Vec<u8>> {
+        <Self as super::IPriceOracle>::calculate_gas_cost(self, chain_id, gas_amount)
+    }
+}

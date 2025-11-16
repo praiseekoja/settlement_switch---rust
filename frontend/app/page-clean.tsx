@@ -17,56 +17,9 @@ import {
   SUPPORTED_CHAINS,
   TOKENS,
 } from './config';
+import { ROUTER_ABI } from './contracts/router';
 
-// Router ABI
-const ROUTER_ABI = [
-  {
-    name: 'getRoutes',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      {
-        components: [
-          { name: 'fromChain', type: 'uint256' },
-          { name: 'toChain', type: 'uint256' },
-          { name: 'token', type: 'address' },
-          { name: 'amount', type: 'uint256' },
-          { name: 'recipient', type: 'address' },
-        ],
-        name: 'request',
-        type: 'tuple',
-      },
-    ],
-    outputs: [
-      {
-        components: [
-          { name: 'bridgeAdapter', type: 'address' },
-          { name: 'bridgeName', type: 'string' },
-          { name: 'estimatedTime', type: 'uint256' },
-          { name: 'estimatedGasCost', type: 'uint256' },
-          { name: 'bridgeFee', type: 'uint256' },
-          { name: 'totalCostUSD', type: 'uint256' },
-          { name: 'amountOut', type: 'uint256' },
-          { name: 'available', type: 'bool' },
-        ],
-        name: 'routes',
-        type: 'tuple[]',
-      },
-    ],
-  },
-  {
-    name: 'executeBestRoute',
-    type: 'function',
-    stateMutability: 'payable',
-    inputs: [
-      { name: 'toChain', type: 'uint256' },
-      { name: 'token', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-      { name: 'recipient', type: 'address' },
-    ],
-    outputs: [{ name: 'success', type: 'bool' }],
-  },
-] as const;
+// Use canonical ROUTER_ABI from contracts (findBestRoute, executeTransfer)
 
 // ERC20 ABI (minimal)
 const ERC20_ABI = [
@@ -131,17 +84,15 @@ export default function Page() {
   const { data: routesData, refetch: refetchRoutes } = useReadContract({
     address: routerAddress,
     abi: ROUTER_ABI,
-    functionName: 'getRoutes',
+    functionName: 'findBestRoute',
     args: address && amount && Number(amount) > 0 
-      ? [
-          {
-            fromChain: BigInt(fromChainId),
-            toChain: BigInt(toChainId),
-            token: tokenAddress,
-            amount: parseUnits(amount, tokenDecimals),
-            recipient: address,
-          }
-        ]
+      ? [{
+          fromChain: BigInt(fromChainId),
+          toChain: BigInt(toChainId),
+          token: tokenAddress,
+          amount: parseUnits(amount, tokenDecimals),
+          recipient: address,
+        }]
       : undefined,
     query: {
       enabled: Boolean(address && amount && Number(amount) > 0 && isConnected),
@@ -150,9 +101,10 @@ export default function Page() {
 
   // Sort routes based on optimization preference
   const sortedRoutes = useMemo(() => {
-    if (!routesData || !Array.isArray(routesData)) return [];
+    if (!routesData) return [];
 
-    const formattedRoutes = (routesData as any[]).map(route => ({
+    const route = routesData as any;
+    const formattedRoutes = [{
       bridgeName: route.bridgeName,
       estimatedTime: Number(route.estimatedTime),
       estimatedGasCost: Number(formatUnits(route.estimatedGasCost, 8)),
@@ -160,7 +112,7 @@ export default function Page() {
       totalCostUSD: Number(formatUnits(route.totalCostUSD, 8)),
       amountOut: Number(formatUnits(route.amountOut, tokenDecimals)),
       available: route.available,
-    }));
+    }];
 
     // Sort based on optimization slider
     const sorted = [...formattedRoutes].sort((a, b) => {
@@ -254,17 +206,33 @@ export default function Page() {
 
       setTxStatus('confirming');
 
-      await bridge({
-        address: routerAddress,
-        abi: ROUTER_ABI,
-        functionName: 'executeBestRoute',
-        args: [
-          BigInt(toChainId),
-          tokenAddress,
-          amountInWei,
-          address,
-        ],
-      });
+      try {
+        await bridge({
+          address: routerAddress,
+          abi: ROUTER_ABI,
+          functionName: 'executeTransfer',
+          args: [{
+            fromChain: BigInt(fromChainId),
+            toChain: BigInt(toChainId),
+            token: tokenAddress,
+            amount: amountInWei,
+            recipient: address,
+          }],
+        });
+      } catch (primaryErr: any) {
+        // Fallback to alternate function name if present
+        await bridge({
+          address: routerAddress,
+          abi: ROUTER_ABI,
+          functionName: 'executeBestRoute' as any,
+          args: [
+            BigInt(toChainId),
+            tokenAddress,
+            amountInWei,
+            address,
+          ] as any,
+        });
+      }
 
     } catch (error: any) {
       console.error('Bridge error:', error);
